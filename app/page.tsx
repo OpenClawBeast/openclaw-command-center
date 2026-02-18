@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { FolderGit2, Wrench, Server } from 'lucide-react';
+import { FolderGit2, Wrench, Server, Bot } from 'lucide-react';
 import RepositoriesTab from './components/RepositoriesTab';
 import SkillsTab from './components/SkillsTab';
 import NodesTab from './components/NodesTab';
+import AgentsTab from './components/AgentsTab';
 
-type Tab = 'repositories' | 'skills' | 'nodes';
+type Tab = 'repositories' | 'agents' | 'skills' | 'nodes';
 
 export default function CommandCenter() {
   const [activeTab, setActiveTab] = useState<Tab>('repositories');
@@ -43,6 +44,12 @@ export default function CommandCenter() {
               label="Repositories"
             />
             <TabButton
+              active={activeTab === 'agents'}
+              onClick={() => setActiveTab('agents')}
+              icon={<Bot className="h-4 w-4" />}
+              label="Agents"
+            />
+            <TabButton
               active={activeTab === 'skills'}
               onClick={() => setActiveTab('skills')}
               icon={<Wrench className="h-4 w-4" />}
@@ -61,6 +68,7 @@ export default function CommandCenter() {
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
         {activeTab === 'repositories' && <RepositoriesTab />}
+        {activeTab === 'agents' && <AgentsTab />}
         {activeTab === 'skills' && <SkillsTab />}
         {activeTab === 'nodes' && <NodesTab />}
       </main>
