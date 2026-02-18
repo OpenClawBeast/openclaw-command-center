@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Bot, Plus, Activity, Clock, Cpu, MessageSquare, Settings, RefreshCw } from 'lucide-react';
 import { gatewayWs } from '../lib/gateway-ws';
+import { gatewayAPI } from '../lib/gateway-api';
 
 interface Agent {
   id: string;

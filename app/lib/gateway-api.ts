@@ -1,6 +1,6 @@
 // Gateway API client for OpenClaw Command Center
 
-const GATEWAY_URL = 'https://doc.ai1offs.com';
+const GATEWAY_URL = 'https://doc.ailoffs.com';
 const GATEWAY_TOKEN = '2rumec19gpkkm6gorg16hbgs5j9tp0ej';
 
 interface GatewayResponse<T = any> {
