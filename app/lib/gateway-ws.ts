@@ -31,16 +31,18 @@ export class GatewayWebSocket {
     return new Promise((resolve, reject) => {
       const wsUrl = this.url.replace(/^https/, 'wss').replace(/^http/, 'ws');
       this.ws = new WebSocket(wsUrl);
+      let connected = false;
 
       this.ws.onopen = () => {
         // Send connect frame
-        this.ws?.send(JSON.stringify({
-          connect: {
-            token: this.token,
-            clientVersion: '2026.2.6'
-          }
-        }));
-        resolve();
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({
+            connect: {
+              token: this.token,
+              clientVersion: '2026.2.6'
+            }
+          }));
+        }
       };
 
       this.ws.onerror = (error) => {
@@ -49,6 +51,13 @@ export class GatewayWebSocket {
 
       this.ws.onmessage = (event) => {
         const frame = JSON.parse(event.data);
+        
+        // HelloOk frame
+        if (frame.hello && !connected) {
+          connected = true;
+          resolve();
+          return;
+        }
         
         if (frame.seq !== undefined) {
           // Response frame
