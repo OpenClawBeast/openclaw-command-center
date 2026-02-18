@@ -1,6 +1,6 @@
 // WebSocket client for OpenClaw Gateway
 
-const GATEWAY_URL = 'wss://doc.ailoffs.com:18789';
+const GATEWAY_URL = 'wss://doc.ai1offs.com:18789';
 const GATEWAY_TOKEN = '2rumec19gpkkm6gorg16hbgs5j9tp0ej';
 
 type RequestFrame = {
