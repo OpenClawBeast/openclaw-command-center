@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Bot, Plus, Activity, Clock, Cpu, MessageSquare, Settings, RefreshCw } from 'lucide-react';
-import { gatewayAPI } from '../lib/gateway-api';
+import { gatewayWs } from '../lib/gateway-ws';
 
 interface Agent {
   id: string;
@@ -39,15 +39,10 @@ export default function AgentsTab() {
   const loadAgents = async () => {
     try {
       setError(null);
-      const response = await gatewayAPI.listSessions({ messageLimit: 5 });
+      const response = await gatewayWs.listSessions({ limit: 100, includeLastMessage: true });
       
-      if (!response.ok) {
-        setError(response.error || 'Failed to load agents');
-        return;
-      }
-
       // Transform sessions into agents
-      const sessionsData = response.data?.sessions || [];
+      const sessionsData = response?.sessions || [];
       const transformedAgents: Agent[] = sessionsData.map((session: any) => ({
         id: session.sessionKey || session.id,
         name: session.label || session.sessionKey || 'Unknown',
