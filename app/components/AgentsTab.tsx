@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { Bot, Plus, Activity, Clock, Cpu, MessageSquare, Settings } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Bot, Plus, Activity, Clock, Cpu, MessageSquare, Settings, RefreshCw } from 'lucide-react';
+import { gatewayAPI } from '../lib/gateway-api';
 
 interface Agent {
   id: string;
@@ -16,37 +17,12 @@ interface Agent {
   thinking: 'low' | 'medium' | 'high';
 }
 
-const mockAgents: Agent[] = [
-  {
-    id: '1',
-    name: 'main',
-    type: 'main',
-    status: 'active',
-    model: 'Haiku',
-    tokens: { used: 36000, max: 200000 },
-    sessions: 1,
-    uptime: '4h 23m',
-    lastActivity: 'just now',
-    thinking: 'low',
-  },
-  {
-    id: '2',
-    name: 'isolated-task-1',
-    type: 'isolated',
-    status: 'thinking',
-    model: 'Sonnet',
-    tokens: { used: 12000, max: 200000 },
-    sessions: 1,
-    uptime: '15m',
-    lastActivity: '2s ago',
-    thinking: 'high',
-  },
-];
-
 export default function AgentsTab() {
-  const [agents] = useState<Agent[]>(mockAgents);
-  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(agents[0]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [isSpawning, setIsSpawning] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Spawn form state
   const [spawnTask, setSpawnTask] = useState('');
@@ -54,13 +30,126 @@ export default function AgentsTab() {
   const [spawnThinking, setSpawnThinking] = useState<'low' | 'medium' | 'high'>('low');
   const [spawnLabel, setSpawnLabel] = useState('');
 
-  const handleSpawn = () => {
-    // In real implementation, would call sessions_spawn API
-    console.log('Spawning agent:', { spawnTask, spawnModel, spawnThinking, spawnLabel });
-    setIsSpawning(false);
-    setSpawnTask('');
-    setSpawnLabel('');
+  useEffect(() => {
+    loadAgents();
+    const interval = setInterval(loadAgents, 10000); // Refresh every 10s
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadAgents = async () => {
+    try {
+      setError(null);
+      const response = await gatewayAPI.listSessions({ messageLimit: 5 });
+      
+      if (!response.ok) {
+        setError(response.error || 'Failed to load agents');
+        return;
+      }
+
+      // Transform sessions into agents
+      const sessionsData = response.data?.sessions || [];
+      const transformedAgents: Agent[] = sessionsData.map((session: any) => ({
+        id: session.sessionKey || session.id,
+        name: session.label || session.sessionKey || 'Unknown',
+        type: session.kind === 'main' ? 'main' : session.kind === 'isolated' ? 'isolated' : 'sub-agent',
+        status: 'active',
+        model: session.model || 'Unknown',
+        tokens: {
+          used: session.tokenUsage?.total || 0,
+          max: 200000,
+        },
+        sessions: 1,
+        uptime: formatUptime(session.createdAt),
+        lastActivity: formatLastActivity(session.lastMessageAt),
+        thinking: 'low',
+      }));
+
+      setAgents(transformedAgents);
+      if (transformedAgents.length > 0 && !selectedAgent) {
+        setSelectedAgent(transformedAgents[0]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const formatUptime = (createdAt: string | number) => {
+    if (!createdAt) return 'Unknown';
+    const now = Date.now();
+    const created = typeof createdAt === 'number' ? createdAt : new Date(createdAt).getTime();
+    const diff = now - created;
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h ${minutes}m`;
+  };
+
+  const formatLastActivity = (lastMessageAt: string | number) => {
+    if (!lastMessageAt) return 'Unknown';
+    const now = Date.now();
+    const last = typeof lastMessageAt === 'number' ? lastMessageAt : new Date(lastMessageAt).getTime();
+    const diff = now - last;
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    
+    if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
+    if (seconds > 0) return `${seconds}s ago`;
+    return 'just now';
+  };
+
+  const handleSpawn = async () => {
+    if (!spawnTask.trim()) return;
+
+    try {
+      setLoading(true);
+      const response = await gatewayAPI.spawnSession({
+        task: spawnTask,
+        model: spawnModel,
+        thinking: spawnThinking,
+        label: spawnLabel || undefined,
+      });
+
+      if (!response.ok) {
+        setError(response.error || 'Failed to spawn agent');
+        return;
+      }
+
+      setIsSpawning(false);
+      setSpawnTask('');
+      setSpawnLabel('');
+      loadAgents(); // Refresh list
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading && agents.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin h-12 w-12 border-4 border-openclaw-orange border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  if (error && agents.length === 0) {
+    return (
+      <div className="bg-red-500/10 border border-red-500 rounded-lg p-6 text-center">
+        <p className="text-red-400 font-semibold mb-2">Failed to connect to Gateway</p>
+        <p className="text-sm text-gray-400 mb-4">{error}</p>
+        <button
+          onClick={loadAgents}
+          className="px-4 py-2 bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -71,12 +160,21 @@ export default function AgentsTab() {
             <div className="bg-gray-800/50 rounded-lg border border-gray-700">
               <div className="p-4 border-b border-gray-700 flex items-center justify-between">
                 <h2 className="font-semibold">Agents</h2>
-                <button
-                  onClick={() => setIsSpawning(true)}
-                  className="p-1 hover:bg-gray-700 rounded"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={loadAgents}
+                    className="p-1 hover:bg-gray-700 rounded"
+                    title="Refresh"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setIsSpawning(true)}
+                    className="p-1 hover:bg-gray-700 rounded"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
               <div className="divide-y divide-gray-700">
                 {agents.map((agent) => (
@@ -92,7 +190,7 @@ export default function AgentsTab() {
                         agent.status === 'active' ? 'bg-green-500' :
                         agent.status === 'thinking' ? 'bg-blue-500 animate-pulse' : 'bg-yellow-500'
                       }`}></div>
-                      <span className="font-medium text-sm">{agent.name}</span>
+                      <span className="font-medium text-sm truncate">{agent.name}</span>
                     </div>
                     <p className="text-xs text-gray-400 capitalize">{agent.type}</p>
                   </button>
@@ -195,7 +293,7 @@ export default function AgentsTab() {
                     <div className="w-full bg-gray-700 rounded-full h-2">
                       <div
                         className="bg-openclaw-orange rounded-full h-2 transition-all"
-                        style={{ width: `${(selectedAgent.tokens.used / selectedAgent.tokens.max) * 100}%` }}
+                        style={{ width: `${Math.min((selectedAgent.tokens.used / selectedAgent.tokens.max) * 100, 100)}%` }}
                       ></div>
                     </div>
                   </div>
@@ -263,29 +361,6 @@ export default function AgentsTab() {
                     <button className="px-4 py-2 bg-openclaw-orange hover:bg-openclaw-orange/80 rounded-lg font-medium transition-colors">
                       Save Configuration
                     </button>
-                  </div>
-                </div>
-
-                {/* Recent Activity */}
-                <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-6">
-                  <h3 className="text-lg font-semibold mb-4">Recent Messages</h3>
-                  
-                  <div className="space-y-3">
-                    <MessageItem
-                      role="user"
-                      content="Add an Agents tab as well"
-                      time="just now"
-                    />
-                    <MessageItem
-                      role="assistant"
-                      content="Creating AgentsTab component with agent management interface..."
-                      time="2s ago"
-                    />
-                    <MessageItem
-                      role="user"
-                      content="Rebuild Command Center with multi-repo approach"
-                      time="5m ago"
-                    />
                   </div>
                 </div>
               </div>
@@ -360,13 +435,19 @@ export default function AgentsTab() {
               </div>
             </div>
 
+            {error && (
+              <div className="bg-red-500/10 border border-red-500 rounded-lg p-4">
+                <p className="text-sm text-red-400">{error}</p>
+              </div>
+            )}
+
             <div className="flex gap-3 pt-4">
               <button
                 onClick={handleSpawn}
-                disabled={!spawnTask.trim()}
+                disabled={!spawnTask.trim() || loading}
                 className="px-6 py-2 bg-openclaw-orange hover:bg-openclaw-orange/80 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
               >
-                Spawn Agent
+                {loading ? 'Spawning...' : 'Spawn Agent'}
               </button>
               <button
                 onClick={() => setIsSpawning(false)}
@@ -395,24 +476,6 @@ function StatCard({ icon, label, value, valueClass = '' }: {
         <span className="text-xs">{label}</span>
       </div>
       <p className={`font-semibold capitalize ${valueClass}`}>{value}</p>
-    </div>
-  );
-}
-
-function MessageItem({ role, content, time }: {
-  role: 'user' | 'assistant';
-  content: string;
-  time: string;
-}) {
-  return (
-    <div className={`p-3 rounded-lg ${
-      role === 'user' ? 'bg-blue-500/10' : 'bg-gray-900/50'
-    }`}>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-medium text-gray-400 capitalize">{role}</span>
-        <span className="text-xs text-gray-500">{time}</span>
-      </div>
-      <p className="text-sm">{content}</p>
     </div>
   );
 }
