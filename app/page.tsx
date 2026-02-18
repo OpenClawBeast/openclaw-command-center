@@ -22,7 +22,7 @@ export default function CommandCenter() {
               <div className="text-3xl">🦞</div>
               <div>
                 <h1 className="text-2xl font-bold">OpenClaw Command Center</h1>
-                <p className="text-sm text-gray-400">Manage repositories, skills, and nodes</p>
+                <p className="text-sm text-gray-400">Manage repositories, agents, skills, and nodes</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
