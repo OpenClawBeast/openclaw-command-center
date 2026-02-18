@@ -15,6 +15,14 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Accept build arguments for Next.js public env vars
+ARG NEXT_PUBLIC_GATEWAY_URL
+ARG NEXT_PUBLIC_GATEWAY_TOKEN
+
+# Set as environment variables for the build
+ENV NEXT_PUBLIC_GATEWAY_URL=$NEXT_PUBLIC_GATEWAY_URL
+ENV NEXT_PUBLIC_GATEWAY_TOKEN=$NEXT_PUBLIC_GATEWAY_TOKEN
+
 # Build Next.js app
 RUN npm run build
 
